@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>영림 대리점 전용 웹 카탈로그</title>
+    <!-- 카페24 FTP에 업로드된 CSS 경로 -->
+    <link rel="stylesheet" href="catalog.css">
+    <!-- Google Fonts: 프리미엄 폰트 Inter 적용 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- 
+      [중요] PDF.js 라이브러리는 카페24 FTP에 직접 업로드하여 사용하시거나, 
+      테스트 중에는 아래 CDN을 유지하셔도 됩니다. 
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+
+<body>
+    <div id="catalog-container">
+        <!-- 제품 카테고리 탭 (상단 고정) -->
+        <nav id="category-tabs">
+            <ul id="tab-list">
+                <li class="tab-item active" data-category="제품A">제품A</li>
+                <li class="tab-item" data-category="제품B">제품B</li>
+                <li class="tab-item" data-category="제품C">제품C</li>
+                <li class="tab-item" data-category="제품D">제품D</li>
+            </ul>
+        </nav>
+
+        <!-- PDF 렌더링 영역 -->
+        <main id="pdf-viewer-wrap">
+            <div id="pdf-render-target">
+                <div id="loading-spinner" class="spinner">
+                    <p>카탈로그를 불러오고 있습니다...</p>
+                    <div id="load-progress"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 카카오톡 문의 플로팅 버튼 -->
+        <div id="floating-contact">
+            <a href="#" id="kakao-talk-btn" target="_blank">
+                <span class="icon">💬</span>
+                <span class="text">견적/문의</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 핵심 로직 파일 -->
+    <script src="catalog.js"></script>
+</body>
+
+</html>
