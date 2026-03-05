@@ -3,12 +3,12 @@
  */
 
 :root {
-    --primary-color: #123628;
-    /* 대산 브랜드 다크 그린 */
-    --accent-color: #48BB78;
-    /* 대산 CTA 그린 */
+    --primary-color: #1a1a1a;
+    /* 깊은 블랙 */
+    --accent-color: #d4af37;
+    /* 프리미엄 골드 */
     --bg-color: #ffffff;
-    --tab-bg: rgba(18, 54, 40, 0.97);
+    --tab-bg: rgba(255, 255, 255, 0.95);
     --text-main: #222222;
     --text-muted: #888888;
     --spacing-base: 20px;
@@ -43,7 +43,7 @@ body {
     z-index: 1000;
     background-color: var(--tab-bg);
     backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(72, 187, 120, 0.2);
+    border-bottom: 1px solid #eeeeee;
     padding: 15px 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -67,17 +67,17 @@ body {
     border-radius: 40px;
     font-weight: 600;
     cursor: pointer;
-    background-color: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.65);
+    background-color: #f5f5f5;
+    color: var(--text-muted);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: none;
     font-size: 0.95rem;
 }
 
 .tab-item.active {
-    background-color: var(--accent-color);
+    background-color: var(--primary-color);
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.35);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* PDF Viewer Design */
@@ -130,7 +130,7 @@ body {
 
 .progress-bar-fill {
     height: 100%;
-    background: var(--accent-color);
+    background: var(--primary-color);
     width: 0%;
     transition: width 0.3s ease;
 }
