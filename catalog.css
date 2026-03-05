@@ -111,7 +111,33 @@ body {
     font-weight: 500;
 }
 
+/* Loading Progress Bar */
 #load-progress {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.progress-container {
+    width: 200px;
+    height: 4px;
+    background: #eee;
+    border-radius: 2px;
+    margin: 10px auto;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--primary-color);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* Spinner & Animations */
+#load-progress-old {
+    /* Renamed to avoid conflict with new #load-progress */
     margin-top: 10px;
     height: 3px;
     background: #e0e0e0;

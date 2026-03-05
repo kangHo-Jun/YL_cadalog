@@ -57,28 +57,86 @@ async function loadColorDB() {
  */
 async function initCatalog() {
     const loadingTarget = document.getElementById('loading-spinner');
-    const finalUrl = CONFIG.pdfUrl + (CONFIG.pdfUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+    // 캐시 방지 쿼리 스트링 제거 (Range Request 효율성을 위해)
+    const finalUrl = CONFIG.pdfUrl;
 
     try {
         const loadingTask = pdfjsLib.getDocument({
             url: finalUrl,
             withCredentials: false,
-            disableRange: true,
-            disableAutoFetch: true
+            disableRange: false,     // Range Request 활성화 (대용량 PDF 최적화)
+            disableAutoFetch: false,   // 필요한 부분만 자동 로드
+            disableStream: false      // 스트리밍 활성화
         });
 
         loadingTask.onProgress = (progress) => {
+            if (pdfDoc) return; // 이미 문서 구조가 확인되었다면 프로그레스 무시
             const percent = Math.round((progress.loaded / progress.total) * 100);
             const progressBar = document.getElementById('load-progress');
+            const progressFill = document.getElementById('progress-fill');
             if (progressBar && percent > 0) {
-                progressBar.innerText = `로드 중... ${percent}%`;
+                progressBar.innerText = `스트리밍 중... ${percent}%`;
+            }
+            if (progressFill) {
+                progressFill.style.width = `${percent}%`;
             }
         };
 
+        // 전체 파일을 다 받지 않고 헤더/메타정보만 확인되면 바로 진행
         pdfDoc = await loadingTask.promise;
+
+        // 프로그레스 바 숨김
+        if (loadingTarget) loadingTarget.style.display = 'none';
+
         renderCategory(currentCategory);
     } catch (error) {
-        loadingTarget.innerHTML = `<p style="color:red">로드 실패: ${error.message}</p>`;
+        if (loadingTarget) {
+            loadingTarget.innerHTML = `<p style="color:red">로드 실패: ${error.message}</p>`;
+        }
+        console.error("PDF Load Error:", error);
+    }
+}
+
+// 간단한 페이지 캐시 시스템
+const pageCache = new Map();
+
+/**
+ * 페이지 선행 로딩 (Pre-rendering)
+ */
+async function prefetchAdjacentPages() {
+    const nextIdx = currentPageIndex + 1;
+    const prevIdx = currentPageIndex - 1;
+
+    // 다음 페이지 미리 로드
+    if (nextIdx < currentCategoryPages.length) {
+        const pageNum = currentCategoryPages[nextIdx];
+        if (!pageCache.has(pageNum)) {
+            fetchPageToCache(pageNum);
+        }
+    }
+    // 이전 페이지 미리 로드
+    if (prevIdx >= 0) {
+        const pageNum = currentCategoryPages[prevIdx];
+        if (!pageCache.has(pageNum)) {
+            fetchPageToCache(pageNum);
+        }
+    }
+}
+
+async function fetchPageToCache(printedPageNum) {
+    let pdfIdx;
+    if (printedPageNum % 2 === 0) {
+        pdfIdx = (printedPageNum / 2) + 2;
+    } else {
+        pdfIdx = Math.floor(printedPageNum / 2) + 2;
+    }
+
+    try {
+        const page = await pdfDoc.getPage(pdfIdx);
+        pageCache.set(printedPageNum, page);
+        console.log(`Pre-fetched page: ${printedPageNum}`);
+    } catch (e) {
+        console.warn(`Pre-fetch failed for ${printedPageNum}`, e);
     }
 }
 
@@ -100,7 +158,15 @@ async function renderPrintedPage(printedPageNum, container) {
     }
 
     try {
-        const page = await pdfDoc.getPage(pdfIdx);
+        // 캐시 확인
+        let page;
+        if (pageCache.has(printedPageNum)) {
+            page = pageCache.get(printedPageNum);
+        } else {
+            page = await pdfDoc.getPage(pdfIdx);
+            pageCache.set(printedPageNum, page);
+        }
+
         const scale = 2; // 고해상도 유지
         const viewport = page.getViewport({ scale: scale });
 
@@ -207,6 +273,9 @@ async function updateSlider() {
     // 현재 페이지 렌더링
     const printedPageNum = currentCategoryPages[currentPageIndex];
     await renderPrintedPage(printedPageNum, slideWrapper);
+
+    // 주변 페이지 통찰적 선행 로드 시발
+    prefetchAdjacentPages();
 }
 
 // 스와이프 핸들러
