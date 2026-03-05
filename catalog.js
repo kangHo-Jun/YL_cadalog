@@ -3,10 +3,13 @@
  */
 
 const CONFIG = {
-    // [CORS 대응] GitHub Pages URL 사용
-    pdfUrl: 'https://kangho-jun.github.io/YL_cadalog/25-26%20%EC%98%81%EB%A6%BC%20%EC%9E%84%EC%97%85%20%EC%A2%85%ED%95%A9%20%EC%B9%B4%ED%83%88%EB%A1%9C%EA%B7%B8%202%EC%87%84_1212.pdf',
+    // 카테고리별 분할 PDF (73MB → 탭별 1~3MB)
+    categoryPdfs: {
+        '문틀': 'https://kangho-jun.github.io/YL_cadalog/doorframe.pdf',
+        '몰딩': 'https://kangho-jun.github.io/YL_cadalog/molding.pdf',
+        '손잡이': 'https://kangho-jun.github.io/YL_cadalog/handle.pdf'
+    },
 
-    // 카테고리별 표시할 페이지 번호 (사용자 제공 최신 데이터)
     // 카테고리별 표시할 실제 인쇄 페이지 번호 (PDF 인덱스가 아닌 종이에 적힌 번호)
     mapping: {
         '문틀': [326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337],
@@ -29,7 +32,7 @@ const CONFIG = {
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
 pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.workerUrl;
 
-let pdfDoc = null;
+const categoryPdfDocs = {};
 let currentCategory = '문틀';
 let currentCategoryPages = [];
 let currentPageIndex = 0;
@@ -41,48 +44,36 @@ let touchStartX = 0;
 let touchEndX = 0;
 
 /**
- * 카탈로그 초기화 및 PDF 로드
+ * 카테고리별 분할 PDF 로드 (lazy)
+ */
+async function loadCategoryPdf(category) {
+    if (categoryPdfDocs[category]) return categoryPdfDocs[category];
+
+    const url = CONFIG.categoryPdfs[category];
+    if (!url) return null;
+
+    const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+    categoryPdfDocs[category] = await loadingTask.promise;
+    return categoryPdfDocs[category];
+}
+
+/**
+ * 인쇄 페이지 번호 → 분할 PDF 내 인덱스 변환
+ */
+function getSplitPdfIndex(printedPageNum, category) {
+    const originalIdx = (printedPageNum % 2 === 0)
+        ? printedPageNum / 2 + 2
+        : Math.floor(printedPageNum / 2) + 2;
+    const firstPage = CONFIG.mapping[category][0];
+    const firstOrigIdx = (firstPage % 2 === 0) ? firstPage / 2 + 2 : Math.floor(firstPage / 2) + 2;
+    return originalIdx - firstOrigIdx + 1;
+}
+
+/**
+ * 카탈로그 초기화
  */
 async function initCatalog() {
-    const loadingTarget = document.getElementById('loading-spinner');
-    // 캐시 방지 쿼리 스트링 제거 (Range Request 효율성을 위해)
-    const finalUrl = CONFIG.pdfUrl;
-
-    try {
-        const loadingTask = pdfjsLib.getDocument({
-            url: finalUrl,
-            withCredentials: false,
-            disableRange: false,     // Range Request 활성화 (대용량 PDF 최적화)
-            disableAutoFetch: false,   // 필요한 부분만 자동 로드
-            disableStream: false      // 스트리밍 활성화
-        });
-
-        loadingTask.onProgress = (progress) => {
-            if (pdfDoc) return; // 이미 문서 구조가 확인되었다면 프로그레스 무시
-            const percent = Math.round((progress.loaded / progress.total) * 100);
-            const progressBar = document.getElementById('load-progress');
-            const progressFill = document.getElementById('progress-fill');
-            if (progressBar && percent > 0) {
-                progressBar.innerText = `스트리밍 중... ${percent}%`;
-            }
-            if (progressFill) {
-                progressFill.style.width = `${percent}%`;
-            }
-        };
-
-        // 전체 파일을 다 받지 않고 헤더/메타정보만 확인되면 바로 진행
-        pdfDoc = await loadingTask.promise;
-
-        // 프로그레스 바 숨김
-        if (loadingTarget) loadingTarget.style.display = 'none';
-
-        renderCategory(currentCategory);
-    } catch (error) {
-        if (loadingTarget) {
-            loadingTarget.innerHTML = `<p style="color:red">로드 실패: ${error.message}</p>`;
-        }
-        console.error("PDF Load Error:", error);
-    }
+    renderCategory(currentCategory);
 }
 
 // 간단한 페이지 캐시 시스템
@@ -112,17 +103,13 @@ async function prefetchAdjacentPages() {
 }
 
 async function fetchPageToCache(printedPageNum) {
-    let pdfIdx;
-    if (printedPageNum % 2 === 0) {
-        pdfIdx = (printedPageNum / 2) + 2;
-    } else {
-        pdfIdx = Math.floor(printedPageNum / 2) + 2;
-    }
+    const doc = categoryPdfDocs[currentCategory];
+    if (!doc) return;
+    const pdfIdx = getSplitPdfIndex(printedPageNum, currentCategory);
 
     try {
-        const page = await pdfDoc.getPage(pdfIdx);
+        const page = await doc.getPage(pdfIdx);
         pageCache.set(printedPageNum, page);
-        console.log(`Pre-fetched page: ${printedPageNum}`);
     } catch (e) {
         console.warn(`Pre-fetch failed for ${printedPageNum}`, e);
     }
@@ -133,25 +120,16 @@ async function fetchPageToCache(printedPageNum) {
  * 스프레드 방식 PDF를 절반으로 잘라 한 페이지씩 표시합니다.
  */
 async function renderPrintedPage(printedPageNum, container) {
-    // 매핑 공식: 
-    // 짝수 페이지 P -> PDF index (P/2 + 2), side 'left'
-    // 홀수 페이지 P -> PDF index (floor(P/2) + 2), side 'right'
-    let pdfIdx, side;
-    if (printedPageNum % 2 === 0) {
-        pdfIdx = (printedPageNum / 2) + 2;
-        side = 'left';
-    } else {
-        pdfIdx = Math.floor(printedPageNum / 2) + 2;
-        side = 'right';
-    }
+    const side = (printedPageNum % 2 === 0) ? 'left' : 'right';
+    const pdfIdx = getSplitPdfIndex(printedPageNum, currentCategory);
+    const doc = categoryPdfDocs[currentCategory];
 
     try {
-        // 캐시 확인
         let page;
         if (pageCache.has(printedPageNum)) {
             page = pageCache.get(printedPageNum);
         } else {
-            page = await pdfDoc.getPage(pdfIdx);
+            page = await doc.getPage(pdfIdx);
             pageCache.set(printedPageNum, page);
         }
 
@@ -331,23 +309,27 @@ async function renderCategory(category) {
         return;
     }
 
-    if (!pdfDoc) {
-        target.innerHTML = '<div class="spinner">PDF 문서를 로드 중입니다. 잠시만 기다려주세요...</div>';
+    // 상태 초기화
+    currentPageIndex = 0;
+    pageCache.clear();
+
+    // 탭별 PDF lazy-load
+    target.innerHTML = '<div class="spinner">카탈로그를 불러오고 있습니다...</div>';
+    try {
+        await loadCategoryPdf(category);
+    } catch (error) {
+        target.innerHTML = `<div class="spinner" style="color:red">PDF 로드 실패: ${error.message}</div>`;
+        console.error('PDF Load Error:', error);
         return;
     }
 
-    // 상태 초기화
-    currentPageIndex = 0;
-
     if (category === '몰딩') {
-        // 몰딩 탭 특수 로직: 이미지 + 특정 PDF 페이지 범위 (448~464)
         const pages = CONFIG.mapping['몰딩'] || [];
         currentCategoryPages = [
             { type: 'IMAGE', url: 'https://ecimg.cafe24img.com/pg2383b21973322017/daesan3833/intro/image/%E1%84%86%E1%85%A9%E1%86%AF%E1%84%83%E1%85%B5%E1%86%BC_%E1%84%8C%E1%85%A2%E1%84%80%E1%85%A9.png' },
             ...pages.map(p => ({ type: 'PDF', num: p }))
         ];
     } else {
-        // 일반 카테고리 (매핑 데이터 기반)
         const pages = CONFIG.mapping[category] || [];
         currentCategoryPages = pages.map(p => ({ type: 'PDF', num: p }));
     }
