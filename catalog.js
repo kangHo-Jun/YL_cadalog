@@ -125,7 +125,8 @@ async function renderPrintedPage(printedPageNum, container) {
         ctx.drawImage(tempCanvas, sourceX, 0, viewport.width / 2, viewport.height, 0, 0, viewport.width / 2, viewport.height);
 
     } catch (err) {
-        console.error(`Page ${printedPageNum} rendering failed:`, err);
+        console.error(`Page ${printedPageNum} (PDF idx ${pdfIdx}) rendering failed:`, err);
+        throw err; // 바깥 catch로 에러 전파
     }
 }
 
@@ -178,7 +179,7 @@ async function renderCategory(category) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
         console.error('페이지 렌더링 오류:', err);
-        target.innerHTML = '<div class="spinner">페이지 렌더링 중 오류가 발생했습니다.</div>';
+        target.innerHTML = `<div class="spinner">페이지 렌더링 오류: ${err.message}<br><small>F12 콘솔에서 자세한 내용을 확인하세요.</small></div>`;
     }
 }
 
