@@ -97,16 +97,16 @@ async function prefetchAdjacentPages() {
 
     // 다음 페이지 미리 로드
     if (nextIdx < currentCategoryPages.length) {
-        const pageNum = currentCategoryPages[nextIdx];
-        if (!pageCache.has(pageNum)) {
-            fetchPageToCache(pageNum);
+        const info = currentCategoryPages[nextIdx];
+        if (info.type === 'PDF' && !pageCache.has(info.num)) {
+            fetchPageToCache(info.num);
         }
     }
     // 이전 페이지 미리 로드
     if (prevIdx >= 0) {
-        const pageNum = currentCategoryPages[prevIdx];
-        if (!pageCache.has(pageNum)) {
-            fetchPageToCache(pageNum);
+        const info = currentCategoryPages[prevIdx];
+        if (info.type === 'PDF' && !pageCache.has(info.num)) {
+            fetchPageToCache(info.num);
         }
     }
 }
@@ -214,8 +214,8 @@ function initSliderUI(container) {
     `;
 
     const slideWrapper = document.getElementById('pdf-slide-wrapper');
-    slideWrapper.addEventListener('touchstart', handleTouchStart, false);
-    slideWrapper.addEventListener('touchend', handleTouchEnd, false);
+    slideWrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
+    slideWrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     // 키보드 방향키 지원 (중복 등록 방지)
     document.removeEventListener('keydown', handleKeydown);
@@ -253,17 +253,36 @@ async function updateSlider() {
 
     if (!slideWrapper) return;
 
-    // 인디케이터 및 버튼 상태 업데이트
     pageIndicator.innerText = `${currentPageIndex + 1} / ${currentCategoryPages.length}`;
     prevBtn.disabled = currentPageIndex === 0;
     nextBtn.disabled = currentPageIndex === currentCategoryPages.length - 1;
 
-    // 현재 페이지 렌더링
-    const printedPageNum = currentCategoryPages[currentPageIndex];
-    await renderPrintedPage(printedPageNum, slideWrapper);
+    const pageInfo = currentCategoryPages[currentPageIndex];
 
-    // 주변 페이지 통찰적 선행 로드 시발
+    if (pageInfo.type === 'IMAGE') {
+        renderImageSlide(pageInfo.url, slideWrapper);
+    } else {
+        await renderPrintedPage(pageInfo.num, slideWrapper);
+    }
+
     prefetchAdjacentPages();
+}
+
+/**
+ * 이미지 슬라이드 렌더링
+ */
+function renderImageSlide(url, container) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'pdf-canvas-container fade-in'; // 기존 스타일 재사용
+    img.style.objectFit = 'contain';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+
+    container.innerHTML = '';
+    container.appendChild(img);
+
+    setTimeout(() => img.classList.add('active'), 50);
 }
 
 // 스와이프 핸들러
@@ -293,7 +312,6 @@ async function renderCategory(category) {
     const target = document.getElementById('pdf-render-target');
     currentCategory = category;
 
-    // 필름 카테고리는 API 데이터 및 전용 UI 활
     if (category === '필름') {
         const controlsHtml = `
             <div class="controls-header">
@@ -313,16 +331,31 @@ async function renderCategory(category) {
         return;
     }
 
-    // PDF 문서 로드 대기 확인
     if (!pdfDoc) {
         target.innerHTML = '<div class="spinner">PDF 문서를 로드 중입니다. 잠시만 기다려주세요...</div>';
-        // 로드가 완료될 때까지 약간의 대기 후 재시도 가능하도록 로직 보완 가능 (현재는 문구 표시)
         return;
     }
 
     // 상태 초기화
-    currentCategoryPages = CONFIG.mapping[category];
     currentPageIndex = 0;
+
+    if (category === '몰딩') {
+        // 몰딩 탭 특수 로직: 이미지 + PDF 전체
+        currentCategoryPages = [
+            { type: 'IMAGE', url: 'https://ecimg.cafe24img.com/pg2383b21973322017/daesan3833/intro/image/%E1%84%86%E1%85%A9%E1%86%AF%E1%84%83%E1%85%B5%E1%86%BC_%E1%84%8C%E1%85%A2%E1%84%80%E1%85%A9.png' }
+        ];
+
+        // 전체 PDF 페이지 추가 (1페이지부터 최대치까지)
+        // 수식 pdfIdx = floor(P/2) + 2 에 반비례하여 총 인쇄 페이지 수 계산
+        const maxPrintedPage = (pdfDoc.numPages - 2) * 2;
+        for (let p = 1; p <= maxPrintedPage; p++) {
+            currentCategoryPages.push({ type: 'PDF', num: p });
+        }
+    } else {
+        // 일반 카테고리 (매핑 데이터 기반)
+        const pages = CONFIG.mapping[category] || [];
+        currentCategoryPages = pages.map(p => ({ type: 'PDF', num: p }));
+    }
 
     initSliderUI(target);
     await updateSlider();
