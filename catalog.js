@@ -37,9 +37,10 @@ let allItems = [];
 let colorDB = null;
 let isColorSearching = false;
 
-// 스와이프 관련 변수
+// 스와이프 및 휠 관련 변수
 let touchStartX = 0;
 let touchEndX = 0;
+let wheelCooldown = false;
 
 // 색상 DB 로드 능
 async function loadColorDB() {
@@ -162,6 +163,42 @@ function initSliderUI(container) {
     const slideWrapper = document.getElementById('pdf-slide-wrapper');
     slideWrapper.addEventListener('touchstart', handleTouchStart, false);
     slideWrapper.addEventListener('touchend', handleTouchEnd, false);
+
+    // 마우스 휠 지원 (임계값 및 쿨다운 적용)
+    slideWrapper.addEventListener('wheel', handleWheel, { passive: false });
+
+    // 키보드 방향키 지원 (중복 등록 방지)
+    document.removeEventListener('keydown', handleKeydown);
+    document.addEventListener('keydown', handleKeydown);
+}
+
+/**
+ * 키보드 방향키 핸들러
+ */
+function handleKeydown(e) {
+    if (currentCategory === '필름') return;
+    if (e.key === 'ArrowLeft') changePage(-1);
+    if (e.key === 'ArrowRight') changePage(1);
+}
+
+/**
+ * 마우스 휠 핸들러
+ */
+function handleWheel(e) {
+    if (wheelCooldown) return;
+
+    // 기본 스크롤 방지 (선택 사항: 영역 내에서만 스크롤로 페이지 이동)
+    e.preventDefault();
+
+    if (e.deltaY > 0) {
+        changePage(1); // 휠 내림 -> 다음
+    } else if (e.deltaY < 0) {
+        changePage(-1); // 휠 올림 -> 이전
+    }
+
+    // 0.8초 쿨다운 (너무 빠른 전환 방지)
+    wheelCooldown = true;
+    setTimeout(() => { wheelCooldown = false; }, 800);
 }
 
 /**
