@@ -1,8 +1,220 @@
-<!DOCTYPE html>
-<html>
+<div id="yl-film-catalog-app">
+    <style>
+        :root {
+            --primary-color: #222222;
+            --accent-color: #bfa37c;
+            --text-main: #333333;
+            --text-muted: #888888;
+            --bg-light: #f8f9fa;
+        }
 
-<body>
-    <h1>YL Film Catalog</h1>
-</body>
+        #yl-film-catalog-app {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+        }
 
-</html>
+        .film-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 25px;
+            width: 100%;
+            margin-top: 20px;
+            animation: ylFadeIn 0.6s ease-out;
+        }
+
+        .film-card {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .film-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .film-card .thumb-wrap {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            background-color: #f9f9f9;
+        }
+
+        .film-card .thumb-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+
+        .film-card:hover .thumb-wrap img {
+            transform: scale(1.1);
+        }
+
+        .film-card .info-wrap {
+            padding: 15px;
+        }
+
+        .film-card .brand {
+            font-size: 0.75rem;
+            color: var(--accent-color);
+            font-weight: 700;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .film-card .name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .film-card .code {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .pagination-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin: 50px 0;
+            width: 100%;
+        }
+
+        .page-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            background: #fff;
+            color: var(--text-main);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .page-btn.active {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .spinner {
+            padding: 100px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            width: 100%;
+        }
+
+        @keyframes ylFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+
+    <div id="yl-film-render-target">
+        <div class="spinner">제품 목록을 불러오는 중입니다...</div>
+    </div>
+
+    <script>
+        const API_URL = '/api/film';
+
+        async function fetchFilmPage(page = 1) {
+            const target = document.getElementById('yl-film-render-target');
+            target.innerHTML = '<div class="spinner">제품 목록을 불러오는 중입니다...</div>';
+
+            try {
+                const response = await fetch(`${API_URL}?page=${page}&category=Category_1`);
+                const data = await response.json();
+                renderGrid(data, page);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (err) {
+                target.innerHTML = '<div class="spinner" style="color:red">데이터 로드 실패</div>';
+                console.error(err);
+            }
+        }
+
+        function renderGrid(data, currentPage) {
+            const target = document.getElementById('yl-film-render-target');
+            const items = data.film_items || [];
+            const totalPages = data.total_pages || 1;
+
+            let html = '<div class="film-grid">';
+            items.forEach(item => {
+                let imgSrc = item.image_url;
+                if (imgSrc && !imgSrc.startsWith('http')) {
+                    imgSrc = 'https://www.ylfilm.co.kr' + imgSrc;
+                }
+                html += `
+                    <div class="film-card">
+                        <div class="thumb-wrap">
+                            <img src="${imgSrc}" alt="${item.film_name}" loading="lazy">
+                        </div>
+                        <div class="info-wrap">
+                            <span class="brand">YOUNGLIM FILM</span>
+                            <p class="name">${item.film_name}</p>
+                            <p class="code">${item.film_no}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            if (totalPages > 1) {
+                html += '<div class="pagination-wrap">';
+                html += '<button class="page-btn" ' + (currentPage === 1 ? 'disabled' : '') + ' onclick="fetchFilmPage(' + (currentPage - 1) + ')">&lt;</button>';
+
+                const startPage = Math.max(1, currentPage - 2);
+                const endPage = Math.min(totalPages, startPage + 4);
+
+                for (let i = startPage; i <= endPage; i++) {
+                    html += '<button class="page-btn ' + (i === currentPage ? 'active' : '') + '" onclick="fetchFilmPage(' + i + ')">' + i + '</button>';
+                }
+
+                html += '<button class="page-btn" ' + (currentPage === totalPages ? 'disabled' : '') + ' onclick="fetchFilmPage(' + (currentPage + 1) + ')">&gt;</button>';
+                html += '</div>';
+            }
+            target.innerHTML = html;
+        }
+
+        fetchFilmPage(1);
+    </script>
+</div>
