@@ -31,9 +31,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.workerUrl;
 
 let pdfDoc = null;
 let currentCategory = '문틀';
+let currentCategoryPages = [];
+let currentPageIndex = 0;
 let allItems = [];
 let colorDB = null;
 let isColorSearching = false;
+
+// 스와이프 관련 변수
+let touchStartX = 0;
+let touchEndX = 0;
 
 // 색상 DB 로드 능
 async function loadColorDB() {
@@ -100,14 +106,13 @@ async function renderPrintedPage(printedPageNum, container) {
 
         // 실제 화면에 보여줄 캔버스 (크롭된 크기)
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
         canvas.width = viewport.width / 2;
         canvas.height = viewport.height;
-        canvas.style.width = '100%';
-        canvas.style.height = 'auto';
-        canvas.style.marginBottom = '15px';
-        canvas.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+        canvas.className = 'pdf-canvas-container fade-in';
 
+        container.innerHTML = ''; // 기존 슬라이드 제거
         container.appendChild(canvas);
 
         // 임시 캔버스로 전체 스프레드 렌더링 후 필요한 부분만 복사
@@ -124,9 +129,90 @@ async function renderPrintedPage(printedPageNum, container) {
         const sourceX = (side === 'left') ? 0 : viewport.width / 2;
         ctx.drawImage(tempCanvas, sourceX, 0, viewport.width / 2, viewport.height, 0, 0, viewport.width / 2, viewport.height);
 
+        // 애니메이션 효과를 위해 클래스 추가
+        setTimeout(() => canvas.classList.add('active'), 50);
+
     } catch (err) {
         console.error(`Page ${printedPageNum} (PDF idx ${pdfIdx}) rendering failed:`, err);
         throw err; // 바깥 catch로 에러 전파
+    }
+}
+
+/**
+ * 슬라이더 UI 구성
+ */
+function initSliderUI(container) {
+    container.innerHTML = `
+        <div class="pdf-slider-container">
+            <div id="pdf-slide-wrapper" class="pdf-slide-wrapper">
+                <div class="spinner">페이지를 구성 중입니다...</div>
+            </div>
+            <div class="slider-controls">
+                <button id="prev-btn" class="nav-btn" onclick="changePage(-1)" title="이전 페이지">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <div id="page-indicator" class="page-indicator">0 / 0</div>
+                <button id="next-btn" class="nav-btn" onclick="changePage(1)" title="다음 페이지">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+            </div>
+        </div>
+    `;
+
+    const slideWrapper = document.getElementById('pdf-slide-wrapper');
+    slideWrapper.addEventListener('touchstart', handleTouchStart, false);
+    slideWrapper.addEventListener('touchend', handleTouchEnd, false);
+}
+
+/**
+ * 페이지 변경 함수
+ */
+async function changePage(direction) {
+    const newIndex = currentPageIndex + direction;
+    if (newIndex < 0 || newIndex >= currentCategoryPages.length) return;
+
+    currentPageIndex = newIndex;
+    await updateSlider();
+}
+
+/**
+ * 슬라이더 상태 업데이트 및 렌더링
+ */
+async function updateSlider() {
+    const slideWrapper = document.getElementById('pdf-slide-wrapper');
+    const pageIndicator = document.getElementById('page-indicator');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+
+    if (!slideWrapper) return;
+
+    // 인디케이터 및 버튼 상태 업데이트
+    pageIndicator.innerText = `${currentPageIndex + 1} / ${currentCategoryPages.length}`;
+    prevBtn.disabled = currentPageIndex === 0;
+    nextBtn.disabled = currentPageIndex === currentCategoryPages.length - 1;
+
+    // 현재 페이지 렌더링
+    const printedPageNum = currentCategoryPages[currentPageIndex];
+    await renderPrintedPage(printedPageNum, slideWrapper);
+}
+
+// 스와이프 핸들러
+function handleTouchStart(e) {
+    touchStartX = e.changedTouches[0].screenX;
+}
+
+function handleTouchEnd(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+}
+
+function handleSwipe() {
+    const threshold = 50;
+    if (touchEndX < touchStartX - threshold) {
+        changePage(1); // 왼쪽으로 쓸기 -> 다음
+    }
+    if (touchEndX > touchStartX + threshold) {
+        changePage(-1); // 오른쪽으로 쓸기 -> 이전
     }
 }
 
@@ -135,6 +221,7 @@ async function renderPrintedPage(printedPageNum, container) {
  */
 async function renderCategory(category) {
     const target = document.getElementById('pdf-render-target');
+    currentCategory = category;
 
     // 필름 카테고리는 API 데이터 및 전용 UI 활
     if (category === '필름') {
@@ -166,28 +253,14 @@ async function renderCategory(category) {
         return;
     }
 
-    const pageNumbers = CONFIG.mapping[category];
+    // 상태 초기화
+    currentCategoryPages = CONFIG.mapping[category];
+    currentPageIndex = 0;
 
-    // 스피너 유지하며 배경 렌더링
-    target.innerHTML = '<div class="spinner">페이지를 구성 중입니다...</div>';
+    initSliderUI(target);
+    await updateSlider();
 
-    const pagesWrapper = document.createElement('div');
-    pagesWrapper.className = 'rendered-pages-list';
-
-    try {
-        // 비연속 페이지들을 순차적으로 크롭하여 렌더링
-        for (const num of pageNumbers) {
-            await renderPrintedPage(num, pagesWrapper);
-        }
-
-        target.innerHTML = '';
-        target.appendChild(pagesWrapper);
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err) {
-        console.error('페이지 렌더링 오류:', err);
-        target.innerHTML = `<div class="spinner">페이지 렌더링 오류: ${err.message}<br><small>F12 콘솔에서 자세한 내용을 확인하세요.</small></div>`;
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /**
