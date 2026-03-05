@@ -135,7 +135,7 @@ async function renderPrintedPage(printedPageNum, container) {
 async function renderCategory(category) {
     const target = document.getElementById('pdf-render-target');
 
-    // 필름 카테고리는 API 데이터 및 전용 UI 활용
+    // 필름 카테고리는 API 데이터 및 전용 UI 활
     if (category === '필름') {
         const controlsHtml = `
             <div class="controls-header">
@@ -157,6 +157,8 @@ async function renderCategory(category) {
         fetchFilmProducts(1);
         return;
     }
+
+    const pageNumbers = CONFIG.mapping[category];
 
     // 스피너 유지하며 배경 렌더링
     target.innerHTML = '<div class="spinner">페이지를 구성 중입니다...</div>';
