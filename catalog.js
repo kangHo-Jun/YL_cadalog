@@ -340,17 +340,12 @@ async function renderCategory(category) {
     currentPageIndex = 0;
 
     if (category === '몰딩') {
-        // 몰딩 탭 특수 로직: 이미지 + PDF 전체
+        // 몰딩 탭 특수 로직: 이미지 + 특정 PDF 페이지 범위 (448~464)
+        const pages = CONFIG.mapping['몰딩'] || [];
         currentCategoryPages = [
-            { type: 'IMAGE', url: 'https://ecimg.cafe24img.com/pg2383b21973322017/daesan3833/intro/image/%E1%84%86%E1%85%A9%E1%86%AF%E1%84%83%E1%85%B5%E1%86%BC_%E1%84%8C%E1%85%A2%E1%84%80%E1%85%A9.png' }
+            { type: 'IMAGE', url: 'https://ecimg.cafe24img.com/pg2383b21973322017/daesan3833/intro/image/%E1%84%86%E1%85%A9%E1%86%AF%E1%84%83%E1%85%B5%E1%86%BC_%E1%84%8C%E1%85%A2%E1%84%80%E1%85%A9.png' },
+            ...pages.map(p => ({ type: 'PDF', num: p }))
         ];
-
-        // 전체 PDF 페이지 추가 (1페이지부터 최대치까지)
-        // 수식 pdfIdx = floor(P/2) + 2 에 반비례하여 총 인쇄 페이지 수 계산
-        const maxPrintedPage = (pdfDoc.numPages - 2) * 2;
-        for (let p = 1; p <= maxPrintedPage; p++) {
-            currentCategoryPages.push({ type: 'PDF', num: p });
-        }
     } else {
         // 일반 카테고리 (매핑 데이터 기반)
         const pages = CONFIG.mapping[category] || [];
