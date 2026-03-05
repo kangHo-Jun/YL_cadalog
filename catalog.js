@@ -7,22 +7,21 @@ const CONFIG = {
     pdfUrl: 'https://kangho-jun.github.io/YL_cadalog/25-26%20%EC%98%81%EB%A6%BC%20%EC%9E%84%EC%97%85%20%EC%A2%85%ED%95%A9%20%EC%B9%B4%ED%83%88%EB%A1%9C%EA%B7%B8%202%EC%87%84_1212.pdf',
 
     // 카테고리별 표시할 페이지 번호 (사용자 제공 최신 데이터)
-    // 카테고리별 표시할 PDF 페이지 번호 (스프레드 매핑 완료)
+    // 카테고리별 표시할 실제 인쇄 페이지 번호 (PDF 인덱스가 아닌 종이에 적힌 번호)
     mapping: {
-        '문틀': [165, 166, 167, 168, 169, 170],
-        '몰딩': [226, 227, 228, 229, 230, 231, 232, 233, 234],
-        '손잡이': [172, 173, 174, 175, 176, 177, 178]
+        '문틀': [326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337],
+        '몰딩': [448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464],
+        '손잡이': [340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353]
     },
 
-    // 카카오톡 채널 URL (전달 예정)
+    // 카카오톡 채널 URL
     kakaoTalkUrl: 'https://pf.kakao.com/',
 
-    // 영림 필름 API 설정 (Vercel 배포 URL 연동)
+    // 영림 필름 API 설정
     filmApiUrl: 'https://yl-cadalog.vercel.app/api/film',
     colorsUrl: 'https://yl-cadalog.vercel.app/colors.json',
 
-    // [중요] PDF.js 워커 경로 (카페24 FTP 업로드 경로에 맞춰 수정)
-    // 카페24 FTP의 html/ 폴더에 catalog.html과 함께 있을 경우 './pdf.worker.min.js' 등으로 수정 가능합니다.
+    // PDF.js 워커 경로
     workerUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 };
 
@@ -32,11 +31,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.workerUrl;
 
 let pdfDoc = null;
 let currentCategory = '문틀';
-let allItems = []; // 현재 로드된 필름 품목 저장용
+let allItems = [];
 let colorDB = null;
 let isColorSearching = false;
 
-// 색상 DB 로드 함수
+// 색상 DB 로드 능
 async function loadColorDB() {
     if (colorDB) return;
     try {
@@ -52,11 +51,7 @@ async function loadColorDB() {
  */
 async function initCatalog() {
     const loadingTarget = document.getElementById('loading-spinner');
-
-    // [캐시 방지] URL 뒤에 타임스탬프를 추가하여 항상 최신 파일을 불러오도록 합니다.
     const finalUrl = CONFIG.pdfUrl + (CONFIG.pdfUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
-
-    console.log('PDF 로드 시도 (절대 경로 확인):', finalUrl);
 
     try {
         const loadingTask = pdfjsLib.getDocument({
@@ -66,7 +61,6 @@ async function initCatalog() {
             disableAutoFetch: true
         });
 
-        // 로드 진행률 표시
         loadingTask.onProgress = (progress) => {
             const percent = Math.round((progress.loaded / progress.total) * 100);
             const progressBar = document.getElementById('load-progress');
@@ -76,50 +70,63 @@ async function initCatalog() {
         };
 
         pdfDoc = await loadingTask.promise;
-        console.log('PDF Loaded Successfully from GitHub Pages');
-
-        // 초기 카테고리 렌더링
         renderCategory(currentCategory);
     } catch (error) {
-        console.error('PDF 로드 실패 상세 원인:', error);
-
-        let errorMsg = 'PDF를 불러오지 못했습니다.';
-        if (error.name === 'SecurityError') {
-            errorMsg = '이동된 경로의 보안 정책(CORS)으로 인해 차단되었습니다.';
-        } else if (error.name === 'MissingPDFException') {
-            errorMsg = 'PDF 파일을 찾을 수 없습니다. 경로를 확인해주세요.';
-        }
-
-        loadingTarget.innerHTML = `
-            <p style="color: #ff4d4d; font-weight: bold;">${errorMsg}</p>
-            <p style="font-size: 0.85rem; margin-top:10px; color: #666;">
-                브라우저 콘솔(F12 > Console)의 에러 메시지를 확인해 주세요.<br>
-                (에러 종류: ${error.name})
-            </p>
-        `;
+        loadingTarget.innerHTML = `<p style="color:red">로드 실패: ${error.message}</p>`;
     }
 }
 
 /**
- * 특정 페이지를 Canvas로 렌더링
+ * 인쇄 페이지 번호를 PDF 인덱스와 '좌/우' 정보로 변환하여 렌더링
+ * 스프레드 방식 PDF를 절반으로 잘라 한 페이지씩 표시합니다.
  */
-async function renderPage(pageNum, container) {
-    const page = await pdfDoc.getPage(pageNum);
+async function renderPrintedPage(printedPageNum, container) {
+    // 매핑 공식: 
+    // 짝수 페이지 P -> PDF index (P/2 + 2), side 'left'
+    // 홀수 페이지 P -> PDF index (floor(P/2) + 2), side 'right'
+    let pdfIdx, side;
+    if (printedPageNum % 2 === 0) {
+        pdfIdx = (printedPageNum / 2) + 2;
+        side = 'left';
+    } else {
+        pdfIdx = Math.floor(printedPageNum / 2) + 2;
+        side = 'right';
+    }
 
-    // 모바일 대응 및 선명도를 위해 scale 설정 (2: 고해상도)
-    const viewport = page.getViewport({ scale: 2 });
+    try {
+        const page = await pdfDoc.getPage(pdfIdx);
+        const scale = 2; // 고해상도 유지
+        const viewport = page.getViewport({ scale: scale });
 
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+        // 실제 화면에 보여줄 캔버스 (크롭된 크기)
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width / 2;
+        canvas.height = viewport.height;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        canvas.style.marginBottom = '15px';
+        canvas.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
 
-    container.appendChild(canvas);
+        container.appendChild(canvas);
 
-    await page.render({
-        canvasContext: context,
-        viewport: viewport
-    }).promise;
+        // 임시 캔버스로 전체 스프레드 렌더링 후 필요한 부분만 복사
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        await page.render({
+            canvasContext: tempCtx,
+            viewport: viewport
+        }).promise;
+
+        const sourceX = (side === 'left') ? 0 : viewport.width / 2;
+        ctx.drawImage(tempCanvas, sourceX, 0, viewport.width / 2, viewport.height, 0, 0, viewport.width / 2, viewport.height);
+
+    } catch (err) {
+        console.error(`Page ${printedPageNum} rendering failed:`, err);
+    }
 }
 
 /**
@@ -151,8 +158,6 @@ async function renderCategory(category) {
         return;
     }
 
-    const pageNumbers = CONFIG.mapping[category];
-
     // 스피너 유지하며 배경 렌더링
     target.innerHTML = '<div class="spinner">페이지를 구성 중입니다...</div>';
 
@@ -160,15 +165,14 @@ async function renderCategory(category) {
     pagesWrapper.className = 'rendered-pages-list';
 
     try {
-        // 비연속 페이지들을 순차적으로 렌더링하여 하나의 스크롤 뷰 구현
+        // 비연속 페이지들을 순차적으로 크롭하여 렌더링
         for (const num of pageNumbers) {
-            await renderPage(num, pagesWrapper);
+            await renderPrintedPage(num, pagesWrapper);
         }
 
         target.innerHTML = '';
         target.appendChild(pagesWrapper);
 
-        // 렌더링 완료 후 최상단으로 스크롤 이동
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
         console.error('페이지 렌더링 오류:', err);
