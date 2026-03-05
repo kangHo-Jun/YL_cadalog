@@ -6,7 +6,7 @@ const CONFIG = {
     // [CORS 대응] GitHub Pages URL 사용
     pdfUrl: 'https://kangho-jun.github.io/YL_cadalog/25-26%20%EC%98%81%EB%A6%BC%20%EC%9E%84%EC%97%85%20%EC%A2%85%ED%95%A9%20%EC%B9%B4%ED%83%88%EB%A1%9C%EA%B7%B8%202%EC%87%84_1212.pdf',
 
-    // 카테고리별 표시할 페이지 번호 (현재 임시 데이터, 추후 수정 가능)
+    // 카테고리별 표시할 페이지 번호 (사용자 제공 최신 데이터)
     mapping: {
         '문틀': [326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337],
         '몰딩': [448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464],
@@ -16,8 +16,9 @@ const CONFIG = {
     // 카카오톡 채널 URL (전달 예정)
     kakaoTalkUrl: 'https://pf.kakao.com/',
 
-    // 영림 필름 API 설정 (Vercel 프록시 경로)
-    filmApiUrl: '/api/film',
+    // 영림 필름 API 설정 (Vercel 배포 URL 연동)
+    filmApiUrl: 'https://yl-cadalog.vercel.app/api/film',
+    colorsUrl: 'https://yl-cadalog.vercel.app/colors.json',
 
     // [중요] PDF.js 워커 경로 (카페24 FTP 업로드 경로에 맞춰 수정)
     // 카페24 FTP의 html/ 폴더에 catalog.html과 함께 있을 경우 './pdf.worker.min.js' 등으로 수정 가능합니다.
@@ -30,6 +31,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.workerUrl;
 
 let pdfDoc = null;
 let currentCategory = '문틀';
+let allItems = []; // 현재 로드된 필름 품목 저장용
+let colorDB = null;
+let isColorSearching = false;
+
+// 색상 DB 로드 함수
+async function loadColorDB() {
+    if (colorDB) return;
+    try {
+        const res = await fetch(CONFIG.colorsUrl);
+        colorDB = await res.json();
+    } catch (e) {
+        console.error("Color DB load failed", e);
+    }
+}
 
 /**
  * 카탈로그 초기화 및 PDF 로드
@@ -112,8 +127,25 @@ async function renderPage(pageNum, container) {
 async function renderCategory(category) {
     const target = document.getElementById('pdf-render-target');
 
-    // 필름 카테고리는 API 데이터 활용
+    // 필름 카테고리는 API 데이터 및 전용 UI 활용
     if (category === '필름') {
+        const controlsHtml = `
+            <div class="controls-header">
+                <div class="search-container">
+                    <svg class="search-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="yl-search-input" class="search-input" placeholder="제품명 또는 제품코드로 검색..." oninput="handleKeywordSearch()">
+                </div>
+                <button class="color-search-btn" onclick="document.getElementById('yl-color-input').click()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    색상 검색
+                    <div id="yl-color-preview" class="color-preview"></div>
+                </button>
+                <input type="file" id="yl-color-input" style="display: none" accept="image/*" onchange="handleImageUpload(event)">
+            </div>
+            <div id="film-grid-container"></div>
+        `;
+        target.innerHTML = controlsHtml;
+        loadColorDB(); // 필름 탭 선택 시 색상 DB 로드 시작
         fetchFilmProducts(1);
         return;
     }
@@ -147,60 +179,151 @@ async function renderCategory(category) {
  * 영림 필름 데이터 가져오기 (CORS 대응)
  */
 async function fetchFilmProducts(page) {
-    const target = document.getElementById('pdf-render-target');
+    const target = document.getElementById('film-grid-container');
+    if (!target) return;
     target.innerHTML = '<div class="spinner">제품 목록을 불러오는 중입니다...</div>';
 
-    // Vercel 프록시 호출 (상대 경로 사용)
-    const finalUrl = `${CONFIG.filmApiUrl}?page=${page}&category=Category_1`;
+    // 상태 초기화
+    isColorSearching = false;
+    const searchInput = document.getElementById('yl-search-input');
+    if (searchInput) searchInput.value = '';
+    const colorPreview = document.getElementById('yl-color-preview');
+    if (colorPreview) colorPreview.style.display = 'none';
 
     try {
-        const response = await fetch(finalUrl);
+        const response = await fetch(`${CONFIG.filmApiUrl}?page=${page}&category=Category_1`);
         if (!response.ok) throw new Error('Network response was not ok');
 
         const data = await response.json();
-        renderFilmGrid(data, page);
+        allItems = data.film_items || [];
+        renderFilmGrid(allItems, page, data.total_pages);
 
-        // 페이지 상단으로 이동
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
         console.error('필름 데이터 로드 오류:', err);
-        target.innerHTML = `
-            <div class="spinner" style="color: #ff4d4d;">
-                데이터를 불러오지 못했습니다.<br>
-                잠시 후 다시 시도해주세요.
-            </div>
-        `;
+        target.innerHTML = '<div class="spinner" style="color:red">데이터 로드 실패</div>';
     }
+}
+
+// 키워드 검색 핸들러
+function handleKeywordSearch() {
+    const query = document.getElementById('yl-search-input').value.toLowerCase().trim();
+    const cards = document.querySelectorAll('.film-card');
+    const pagination = document.querySelector('.pagination-wrap');
+
+    let visibleCount = 0;
+    cards.forEach(card => {
+        const name = card.getAttribute('data-name');
+        const code = card.getAttribute('data-code');
+        if (name.includes(query) || code.includes(query)) {
+            card.style.display = 'flex';
+            visibleCount++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+
+    if (pagination) pagination.style.display = query ? 'none' : 'flex';
+    updateNoResults(visibleCount);
+}
+
+// 이미지 업로드 핸들러
+async function handleImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const rgb = extractAverageColor(img);
+            performColorSearch(rgb);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function extractAverageColor(img) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 1;
+    canvas.height = 1;
+    ctx.drawImage(img, 0, 0, 1, 1);
+    const data = ctx.getImageData(0, 0, 1, 1).data;
+    return [data[0], data[1], data[2]];
+}
+
+async function performColorSearch(targetRGB) {
+    const gridContainer = document.getElementById('film-grid-container');
+    if (!colorDB) await loadColorDB();
+
+    isColorSearching = true;
+    const preview = document.getElementById('yl-color-preview');
+    if (preview) {
+        preview.style.backgroundColor = `rgb(${targetRGB[0]},${targetRGB[1]},${targetRGB[2]})`;
+        preview.style.display = 'block';
+    }
+
+    const scoredItems = allItems.map(item => {
+        const dbRGB = colorDB[item.film_no];
+        let similarity = 0;
+        if (dbRGB) {
+            const dist = Math.sqrt(
+                Math.pow(targetRGB[0] - dbRGB[0], 2) +
+                Math.pow(targetRGB[1] - dbRGB[1], 2) +
+                Math.pow(targetRGB[2] - dbRGB[2], 2)
+            );
+            similarity = Math.max(0, 100 - (dist / 441.67 * 100)).toFixed(1);
+        }
+        return { ...item, similarity };
+    });
+
+    scoredItems.sort((a, b) => b.similarity - a.similarity);
+    renderFilmGrid(scoredItems, 1, 1, true);
+}
+
+function updateNoResults(count) {
+    let noResults = document.getElementById('yl-no-results');
+    const grid = document.querySelector('.film-grid');
+    if (!grid) return;
+
+    if (count === 0 && !noResults) {
+        noResults = document.createElement('div');
+        noResults.id = 'yl-no-results';
+        noResults.className = 'no-results';
+        noResults.innerHTML = '검색 결과가 없습니다.';
+        grid.parentNode.insertBefore(noResults, grid.nextSibling);
+    }
+    if (noResults) noResults.style.display = (count === 0) ? 'block' : 'none';
 }
 
 /**
  * 필름 제품 그리드 렌더링
  */
-function renderFilmGrid(data, currentPage) {
-    const target = document.getElementById('pdf-render-target');
-    const items = data.results || [];
-    const totalCount = data.count || 0;
-    const pageSize = 24; // 도메인 확인 결과 페이지당 24개 추정
-    const totalPages = Math.ceil(totalCount / pageSize);
+function renderFilmGrid(items, currentPage, totalPages, isSorted = false) {
+    const target = document.getElementById('film-grid-container');
+    if (!target) return;
 
     let html = '<div class="film-grid">';
 
     items.forEach(item => {
-        // 이미지가 도메인 생략된 경우 처리
-        let imgSrc = item.main_image;
+        let imgSrc = item.image_url;
         if (imgSrc && !imgSrc.startsWith('http')) {
             imgSrc = 'https://www.ylfilm.co.kr' + imgSrc;
         }
+        const simDisplay = (isColorSearching && item.similarity) ? 'flex' : 'none';
 
         html += `
-            <div class="film-card">
+            <div class="film-card" data-name="${item.film_name.toLowerCase()}" data-code="${item.film_no.toLowerCase()}">
+                <div class="similarity-badge" style="display: ${simDisplay}">${item.similarity}% 일치</div>
                 <div class="thumb-wrap">
-                    <img src="${imgSrc}" alt="${item.name}" loading="lazy">
+                    <img src="${imgSrc}" alt="${item.film_name}" loading="lazy">
                 </div>
                 <div class="info-wrap">
                     <span class="brand">YOUNGLIM FILM</span>
-                    <p class="name">${item.name}</p>
-                    <p class="code">${item.code || ''}</p>
+                    <p class="name">${item.film_name}</p>
+                    <p class="code">${item.film_no}</p>
                 </div>
             </div>
         `;
@@ -208,25 +331,19 @@ function renderFilmGrid(data, currentPage) {
 
     html += '</div>';
 
-    // 페이지네이션 추가
-    if (totalPages > 1) {
+    // 페이지네이션 또는 초기화 버튼
+    if (!isSorted && totalPages > 1) {
         html += '<div class="pagination-wrap">';
-
-        // 이전 버튼
         html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage - 1})">&lt;</button>`;
-
-        // 페이지 번호 (최대 5개 표시 예시)
         const startPage = Math.max(1, currentPage - 2);
         const endPage = Math.min(totalPages, startPage + 4);
-
         for (let i = startPage; i <= endPage; i++) {
             html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="fetchFilmProducts(${i})">${i}</button>`;
         }
-
-        // 다음 버튼
         html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage + 1})">&gt;</button>`;
-
         html += '</div>';
+    } else if (isSorted) {
+        html += '<div style="text-align:center; padding: 20px; color: var(--text-muted); cursor: pointer;" onclick="fetchFilmProducts(1)">검색 결과 초기화 (목록으로 돌아가기)</div>';
     }
 
     target.innerHTML = html;
