@@ -16,6 +16,40 @@
             background: #fff;
         }
 
+        /* Search Box Styles */
+        .search-container {
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
+            padding-left: 45px;
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s;
+            box-sizing: border-box;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(191, 163, 124, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
         .film-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -36,6 +70,10 @@
             flex-direction: column;
             text-decoration: none;
             color: inherit;
+        }
+
+        .film-card[style*="display: none"] {
+            display: none !important;
         }
 
         .film-card:hover {
@@ -137,6 +175,15 @@
             width: 100%;
         }
 
+        .no-results {
+            padding: 80px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1rem;
+            width: 100%;
+            display: none;
+        }
+
         @keyframes ylFadeIn {
             from {
                 opacity: 0;
@@ -150,20 +197,36 @@
         }
     </style>
 
+    <div class="search-container">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="yl-search-input" class="search-input" placeholder="제품명 또는 제품코드로 검색..."
+            oninput="filterProducts()">
+    </div>
+
     <div id="yl-film-render-target">
         <div class="spinner">제품 목록을 불러오는 중입니다...</div>
     </div>
 
     <script>
         const API_URL = '/api/film';
-
+        let allItems = []; // 현재 로드된 전체 목록 캐시
+        
         async function fetchFilmPage(page = 1) {
             const target = document.getElementById('yl-film-render-target');
             target.innerHTML = '<div class="spinner">제품 목록을 불러오는 중입니다...</div>';
+            
+            // 검색어 초기화
+            const searchInput = document.getElementById('yl-search-input');
+            if (searchInput) searchInput.value = '';
 
             try {
                 const response = await fetch(`${API_URL}?page=${page}&category=Category_1`);
                 const data = await response.json();
+                allItems = data.film_items || [];
                 renderGrid(data, page);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             } catch (err) {
@@ -172,11 +235,48 @@
             }
         }
 
+        function filterProducts() {
+            const query = document.getElementById('yl-search-input').value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.film-card');
+            const grid = document.querySelector('.film-grid');
+            const pagination = document.querySelector('.pagination-wrap');
+            
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const name = card.querySelector('.name').textContent.toLowerCase();
+                const code = card.querySelector('.code').textContent.toLowerCase();
+                
+                if (name.includes(query) || code.includes(query)) {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // 검색 중일 때는 페이지네이션 숨김 (현재 로드된 데이터 내 필터링이므로)
+            if (pagination) {
+                pagination.style.display = query ? 'none' : 'flex';
+            }
+
+            // 결과 없음 레이아웃
+            let noResults = document.getElementById('yl-no-results');
+            if (!noResults) {
+                noResults = document.createElement('div');
+                noResults.id = 'yl-no-results';
+                noResults.className = 'no-results';
+                noResults.innerHTML = '검색 결과가 없습니다.';
+                grid.parentNode.insertBefore(noResults, grid.nextSibling);
+            }
+            noResults.style.display = (visibleCount === 0) ? 'block' : 'none';
+        }
+
         function renderGrid(data, currentPage) {
             const target = document.getElementById('yl-film-render-target');
             const items = data.film_items || [];
             const totalPages = data.total_pages || 1;
-
+            
             let html = '<div class="film-grid">';
             items.forEach(item => {
                 let imgSrc = item.image_url;
@@ -201,14 +301,14 @@
             if (totalPages > 1) {
                 html += '<div class="pagination-wrap">';
                 html += '<button class="page-btn" ' + (currentPage === 1 ? 'disabled' : '') + ' onclick="fetchFilmPage(' + (currentPage - 1) + ')">&lt;</button>';
-
+                
                 const startPage = Math.max(1, currentPage - 2);
                 const endPage = Math.min(totalPages, startPage + 4);
-
+                
                 for (let i = startPage; i <= endPage; i++) {
                     html += '<button class="page-btn ' + (i === currentPage ? 'active' : '') + '" onclick="fetchFilmPage(' + i + ')">' + i + '</button>';
                 }
-
+                
                 html += '<button class="page-btn" ' + (currentPage === totalPages ? 'disabled' : '') + ' onclick="fetchFilmPage(' + (currentPage + 1) + ')">&gt;</button>';
                 html += '</div>';
             }
