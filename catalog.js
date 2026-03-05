@@ -8,14 +8,16 @@ const CONFIG = {
 
     // 카테고리별 표시할 페이지 번호 (현재 임시 데이터, 추후 수정 가능)
     mapping: {
-        '제품A': [1, 2, 3, 4, 5],
-        '제품B': [6, 7, 8, 9, 10],
-        '제품C': [11, 12, 13, 14, 15],
-        '제품D': [16, 17, 18, 19, 20]
+        '문틀': [326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337],
+        '몰딩': [448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464],
+        '손잡이': [346, 347, 348, 349, 350, 351, 352, 353, 344, 345, 340, 341, 342, 343]
     },
 
     // 카카오톡 채널 URL (전달 예정)
     kakaoTalkUrl: 'https://pf.kakao.com/',
+
+    // 영림 필름 API 설정 (Vercel 프록시 경로)
+    filmApiUrl: '/api/film',
 
     // [중요] PDF.js 워커 경로 (카페24 FTP 업로드 경로에 맞춰 수정)
     // 카페24 FTP의 html/ 폴더에 catalog.html과 함께 있을 경우 './pdf.worker.min.js' 등으로 수정 가능합니다.
@@ -27,7 +29,7 @@ const pdfjsLib = window['pdfjs-dist/build/pdf'];
 pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.workerUrl;
 
 let pdfDoc = null;
-let currentCategory = '제품A';
+let currentCategory = '문틀';
 
 /**
  * 카탈로그 초기화 및 PDF 로드
@@ -109,6 +111,13 @@ async function renderPage(pageNum, container) {
  */
 async function renderCategory(category) {
     const target = document.getElementById('pdf-render-target');
+
+    // 필름 카테고리는 API 데이터 활용
+    if (category === '필름') {
+        fetchFilmProducts(1);
+        return;
+    }
+
     const pageNumbers = CONFIG.mapping[category];
 
     // 스피너 유지하며 배경 렌더링
@@ -132,6 +141,95 @@ async function renderCategory(category) {
         console.error('페이지 렌더링 오류:', err);
         target.innerHTML = '<div class="spinner">페이지 렌더링 중 오류가 발생했습니다.</div>';
     }
+}
+
+/**
+ * 영림 필름 데이터 가져오기 (CORS 대응)
+ */
+async function fetchFilmProducts(page) {
+    const target = document.getElementById('pdf-render-target');
+    target.innerHTML = '<div class="spinner">제품 목록을 불러오는 중입니다...</div>';
+
+    // Vercel 프록시 호출 (상대 경로 사용)
+    const finalUrl = `${CONFIG.filmApiUrl}?page=${page}&category=Category_1`;
+
+    try {
+        const response = await fetch(finalUrl);
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        renderFilmGrid(data, page);
+
+        // 페이지 상단으로 이동
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+        console.error('필름 데이터 로드 오류:', err);
+        target.innerHTML = `
+            <div class="spinner" style="color: #ff4d4d;">
+                데이터를 불러오지 못했습니다.<br>
+                잠시 후 다시 시도해주세요.
+            </div>
+        `;
+    }
+}
+
+/**
+ * 필름 제품 그리드 렌더링
+ */
+function renderFilmGrid(data, currentPage) {
+    const target = document.getElementById('pdf-render-target');
+    const items = data.results || [];
+    const totalCount = data.count || 0;
+    const pageSize = 24; // 도메인 확인 결과 페이지당 24개 추정
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    let html = '<div class="film-grid">';
+
+    items.forEach(item => {
+        // 이미지가 도메인 생략된 경우 처리
+        let imgSrc = item.main_image;
+        if (imgSrc && !imgSrc.startsWith('http')) {
+            imgSrc = 'https://www.ylfilm.co.kr' + imgSrc;
+        }
+
+        html += `
+            <div class="film-card">
+                <div class="thumb-wrap">
+                    <img src="${imgSrc}" alt="${item.name}" loading="lazy">
+                </div>
+                <div class="info-wrap">
+                    <span class="brand">YOUNGLIM FILM</span>
+                    <p class="name">${item.name}</p>
+                    <p class="code">${item.code || ''}</p>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+
+    // 페이지네이션 추가
+    if (totalPages > 1) {
+        html += '<div class="pagination-wrap">';
+
+        // 이전 버튼
+        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage - 1})">&lt;</button>`;
+
+        // 페이지 번호 (최대 5개 표시 예시)
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, startPage + 4);
+
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="fetchFilmProducts(${i})">${i}</button>`;
+        }
+
+        // 다음 버튼
+        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage + 1})">&gt;</button>`;
+
+        html += '</div>';
+    }
+
+    target.innerHTML = html;
 }
 
 // --- 이벤트 핸들링 ---
