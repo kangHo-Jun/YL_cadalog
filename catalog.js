@@ -159,6 +159,13 @@ async function renderCategory(category) {
         return;
     }
 
+    // PDF 문서 로드 대기 확인
+    if (!pdfDoc) {
+        target.innerHTML = '<div class="spinner">PDF 문서를 로드 중입니다. 잠시만 기다려주세요...</div>';
+        // 로드가 완료될 때까지 약간의 대기 후 재시도 가능하도록 로직 보완 가능 (현재는 문구 표시)
+        return;
+    }
+
     const pageNumbers = CONFIG.mapping[category];
 
     // 스피너 유지하며 배경 렌더링
@@ -254,7 +261,7 @@ async function handleImageUpload(event) {
 
 function extractAverageColor(img) {
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     canvas.width = 1;
     canvas.height = 1;
     ctx.drawImage(img, 0, 0, 1, 1);
