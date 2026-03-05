@@ -34,23 +34,11 @@ let currentCategory = '문틀';
 let currentCategoryPages = [];
 let currentPageIndex = 0;
 let allItems = [];
-let colorDB = null;
-let isColorSearching = false;
+let isStockOnly = false; // 방염재고운영 필터 상태
 
 // 스와이프 관련 변수
 let touchStartX = 0;
 let touchEndX = 0;
-
-// 색상 DB 로드 능
-async function loadColorDB() {
-    if (colorDB) return;
-    try {
-        const res = await fetch(CONFIG.colorsUrl);
-        colorDB = await res.json();
-    } catch (e) {
-        console.error("Color DB load failed", e);
-    }
-}
 
 /**
  * 카탈로그 초기화 및 PDF 로드
@@ -313,17 +301,14 @@ async function renderCategory(category) {
                     <svg class="search-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     <input type="text" id="yl-search-input" class="search-input" placeholder="제품명 또는 제품코드로 검색..." oninput="handleKeywordSearch()">
                 </div>
-                <button class="color-search-btn" onclick="document.getElementById('yl-color-input').click()">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                    색상 검색
-                    <div id="yl-color-preview" class="color-preview"></div>
+                <button id="stock-filter-btn" class="stock-filter-btn" onclick="toggleInStockFilter()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 11.08 12 19 2 9"></polyline><polyline points="22 4 12 11.92 2 1.92"></polyline></svg>
+                    방염재고운영
                 </button>
-                <input type="file" id="yl-color-input" style="display: none" accept="image/*" onchange="handleImageUpload(event)">
             </div>
             <div id="film-grid-container"></div>
         `;
         target.innerHTML = controlsHtml;
-        loadColorDB(); // 필름 탭 선택 시 색상 DB 로드 시작
         fetchFilmProducts(1);
         return;
     }
@@ -346,6 +331,17 @@ async function renderCategory(category) {
 }
 
 /**
+ * 방염재고운영 필터 토글
+ */
+function toggleInStockFilter() {
+    isStockOnly = !isStockOnly;
+    const btn = document.getElementById('stock-filter-btn');
+    if (btn) btn.classList.toggle('active', isStockOnly);
+
+    fetchFilmProducts(1);
+}
+
+/**
  * 영림 필름 데이터 가져오기 (CORS 대응)
  */
 async function fetchFilmProducts(page) {
@@ -354,14 +350,17 @@ async function fetchFilmProducts(page) {
     target.innerHTML = '<div class="spinner">제품 목록을 불러오는 중입니다...</div>';
 
     // 상태 초기화
-    isColorSearching = false;
     const searchInput = document.getElementById('yl-search-input');
     if (searchInput) searchInput.value = '';
-    const colorPreview = document.getElementById('yl-color-preview');
-    if (colorPreview) colorPreview.style.display = 'none';
 
     try {
-        const response = await fetch(`${CONFIG.filmApiUrl}?page=${page}&category=Category_1`);
+        // 방염재고운영 필터 적용 여부에 따른 URL 구성
+        let url = `${CONFIG.filmApiUrl}?page=${page}`;
+        if (isStockOnly) {
+            url += `&search_filter=IsStock`;
+        }
+
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Network response was not ok');
 
         const data = await response.json();
@@ -468,9 +467,6 @@ function updateNoResults(count) {
     if (noResults) noResults.style.display = (count === 0) ? 'block' : 'none';
 }
 
-/**
- * 필름 제품 그리드 렌더링
- */
 function renderFilmGrid(items, currentPage, totalPages, isSorted = false) {
     const target = document.getElementById('film-grid-container');
     if (!target) return;
@@ -482,11 +478,9 @@ function renderFilmGrid(items, currentPage, totalPages, isSorted = false) {
         if (imgSrc && !imgSrc.startsWith('http')) {
             imgSrc = 'https://www.ylfilm.co.kr' + imgSrc;
         }
-        const simDisplay = (isColorSearching && item.similarity) ? 'flex' : 'none';
 
         html += `
             <div class="film-card" data-name="${item.film_name.toLowerCase()}" data-code="${item.film_no.toLowerCase()}">
-                <div class="similarity-badge" style="display: ${simDisplay}">${item.similarity}% 일치</div>
                 <div class="thumb-wrap">
                     <img src="${imgSrc}" alt="${item.film_name}" loading="lazy">
                 </div>
@@ -501,9 +495,9 @@ function renderFilmGrid(items, currentPage, totalPages, isSorted = false) {
 
     html += '</div>';
 
-    // 페이지네이션 또는 초기화 버튼
     if (!isSorted && totalPages > 1) {
         html += '<div class="pagination-wrap">';
+        // ... (이동 로직은 그대로 유지)
         html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage - 1})">&lt;</button>`;
         const startPage = Math.max(1, currentPage - 2);
         const endPage = Math.min(totalPages, startPage + 4);
@@ -513,7 +507,7 @@ function renderFilmGrid(items, currentPage, totalPages, isSorted = false) {
         html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="fetchFilmProducts(${currentPage + 1})">&gt;</button>`;
         html += '</div>';
     } else if (isSorted) {
-        html += '<div style="text-align:center; padding: 20px; color: var(--text-muted); cursor: pointer;" onclick="fetchFilmProducts(1)">검색 결과 초기화 (목록으로 돌아가기)</div>';
+        html += '<div style="text-align:center; padding: 20px; color: var(--text-muted); cursor: pointer;" onclick="fetchFilmProducts(1)">필터 해제 (목록으로 돌아가기)</div>';
     }
 
     target.innerHTML = html;
