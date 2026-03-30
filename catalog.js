@@ -17,8 +17,7 @@ const CONFIG = {
         '손잡이': [340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353]
     },
 
-    // 카카오톡 채널 URL
-    kakaoTalkUrl: 'https://pf.kakao.com/',
+
 
     // 영림 필름 API 설정
     filmApiUrl: 'https://yl-cadalog.vercel.app/api/film',
@@ -546,8 +545,7 @@ document.querySelectorAll('.tab-item').forEach(tab => {
     });
 });
 
-// 카톡 링크 적용
-document.getElementById('kakao-talk-btn').href = CONFIG.kakaoTalkUrl;
+
 
 // 실행 시작
 document.addEventListener('DOMContentLoaded', initCatalog);

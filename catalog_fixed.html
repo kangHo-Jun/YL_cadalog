@@ -111,34 +111,9 @@
             color: var(--primary-color);
         }
 
-        #floating-contact {
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            z-index: 2000;
-        }
-
-        #kakao-talk-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #fee500;
-            color: #371717;
-            padding: 14px 26px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 800;
-            box-shadow: 0 10px 25px rgba(254, 229, 0, 0.3);
-        }
-
         @media (max-width: 768px) {
             #tab-list {
                 justify-content: flex-start;
-            }
-
-            #floating-contact {
-                bottom: 25px;
-                right: 25px;
             }
         }
     </style>
@@ -163,12 +138,6 @@
                 </div>
             </div>
         </main>
-        <div id="floating-contact">
-            <a href="https://pf.kakao.com/" id="kakao-talk-btn" target="_blank">
-                <span class="icon">💬</span>
-                <span class="text">견적/문의</span>
-            </a>
-        </div>
     </div>
 
     <script>
