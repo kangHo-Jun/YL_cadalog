@@ -332,8 +332,8 @@ async function renderCategory(category) {
     } else if (category === '손잡이') {
         const pages = CONFIG.mapping['손잡이'] || [];
         currentCategoryPages = [
-            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/추가이미지/domus.png' },
-            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/추가이미지/beplan.png' },
+            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/extra-images/domus.png' },
+            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/extra-images/beplan.png' },
             ...pages.map(p => ({ type: 'PDF', num: p }))
         ];
     } else {
