@@ -329,6 +329,13 @@ async function renderCategory(category) {
             { type: 'IMAGE', url: 'https://ecimg.cafe24img.com/pg2383b21973322017/daesan3833/intro/image/%E1%84%86%E1%85%A9%E1%86%AF%E1%84%83%E1%85%B5%E1%86%BC_%E1%84%8C%E1%85%A2%E1%84%80%E1%85%A9.png' },
             ...pages.map(p => ({ type: 'PDF', num: p }))
         ];
+    } else if (category === '손잡이') {
+        const pages = CONFIG.mapping['손잡이'] || [];
+        currentCategoryPages = [
+            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/%EC%B6%94%EA%B0%80%EC%9D%B4%EB%AF%B8%EC%A7%80/%E1%84%83%E1%85%A9%E1%84%86%E1%85%AE%E1%84%89%E1%85%B3.png' },
+            { type: 'IMAGE', url: 'https://kangho-jun.github.io/YL_cadalog/docs/%EC%B6%94%EA%B0%80%EC%9D%B4%EB%AF%B8%EC%A7%80/%E1%84%87%E1%85%B5%E1%84%91%E1%85%B3%E1%86%AF%E1%84%85%E1%85%A2%E1%86%AB.png' },
+            ...pages.map(p => ({ type: 'PDF', num: p }))
+        ];
     } else {
         const pages = CONFIG.mapping[category] || [];
         currentCategoryPages = pages.map(p => ({ type: 'PDF', num: p }));
